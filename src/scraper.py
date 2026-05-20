@@ -1,3 +1,5 @@
+import hashlib
+import json
 from lxml.html import HtmlElement
 
 from src import constants
@@ -13,7 +15,7 @@ class Scraper(ParserMixin):
         "course_id": './input[@value]/@value',
         "attrib": './div/h3/a',
         "price": './div/h3/following-sibling::div/p/span[@data-usd]',
-        "old_price": './following-sibling::s/span[@data-usd]/@data-usd',
+        "list_price": './following-sibling::s/span[@data-usd]/@data-usd',
         "profile": './/a[contains(@href, "tutorialspoint.com/profile/")]',
     }
     MATCH_KEYS = {
@@ -47,17 +49,19 @@ class Scraper(ParserMixin):
         item = {k: v for k, v in attrib.items() if k in key_list}
         item["data_title"] = item.pop("data-title")
         price_els = element.xpath(self.XPATH_DICT["price"])
-        item["price"] = 0.0
-        item["old_price"] = None
+        item["sale_price"] = 0.0
+        item["list_price"] = None
         if price_els:
-            item["price"] = float(price_els[0].attrib["data-usd"])
-            old_price_elements = price_els[0].xpath(self.XPATH_DICT["old_price"])
-            if old_price_elements:
-                item["old_price"] = float(old_price_elements[0])
+            item["sale_price"] = float(price_els[0].attrib["data-usd"])
+            list_price_elements = price_els[0].xpath(self.XPATH_DICT["list_price"])
+            if list_price_elements:
+                item["list_price"] = float(list_price_elements[0])
         prof_els = element.xpath(self.XPATH_DICT["profile"])
         item["profile"] = prof_els[0].text
         item["profile_url"] = prof_els[0].attrib["href"]
         item["available"] = True
+        sorted_json = json.dumps(item, sort_keys=True).encode("utf-8")
+        item["hexdigest"] = hashlib.md5(sorted_json).hexdigest()
         return item
 
     def main(self):
@@ -77,10 +81,5 @@ class Scraper(ParserMixin):
                 return
             item["course_id"] = course_id
             result[course_id] = item
-        result = list(result.values())
         self.db_manager = DBManager(base_logger=self.base_logger)
-        try:
-            self.db_manager.insert(result)
-        except Exception as e:
-            self.logger.critical(f"COULD NOT INSERT: {e}")
-            utils.save_json("result.json", result)
+        self.db_manager.insert_or_update_db(result)
