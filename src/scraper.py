@@ -1,0 +1,99 @@
+import hashlib
+import json
+
+from lxml.html import HtmlElement
+
+from src import constants
+from src.parser_mixin import ParserMixin
+from src import utils
+from src.db_manager import DBManager
+
+
+class Scraper(ParserMixin):
+    TARGET_URL = "https://market.tutorialspoint.com/mostpopular/courses"
+    XPATH_DICT = {
+        "card": '//a[text()="Get Started"]/following-sibling::div/div[1]/div',
+        "course_id": './input[@value]/@value',
+        "attrib": './div/h3/a',
+        "price": './div/h3/following-sibling::div/p/span[@data-usd]',
+        "list_price": './following-sibling::s/span[@data-usd]/@data-usd',
+        "profile": './/a[contains(@href, "tutorialspoint.com/profile/")]',
+    }
+    MATCH_KEYS = {
+        "original title": "original_title",
+        "datepublished": "date_published",
+        "duration": "duration",
+        "country": "country",
+        "director": "director",
+        "screenwriter": "screenwriter",
+        "cast": "cast",
+        "music": "music",
+        "cinematography": "cinematography",
+        "producer": "producer",
+        "genre": "genre",
+        "movie groups": "movie_groups",
+        "description": "description",
+        "data_movie_id": "data_movie_id"
+    }
+
+    def __init__(self) -> None:
+        self.base_logger = utils.init__logger(constants.LOG_NAME)
+        self.logger = utils.adapter_log(
+            base_logger=self.base_logger,
+            worket_id={"worker_id": "SCRAPER"})
+        self.db_manager = None
+        self.configure_parser()
+
+    def processing_course(self, element: HtmlElement) -> dict:
+        attrib = element.xpath(self.XPATH_DICT["attrib"])[0].attrib
+        key_list = ['href', 'title', 'data-title']
+        item = {k: v for k, v in attrib.items() if k in key_list}
+        item["data_title"] = item.pop("data-title")
+        price_els = element.xpath(self.XPATH_DICT["price"])
+        item["sale_price"] = 0.0
+        item["list_price"] = None
+        if price_els:
+            item["sale_price"] = float(price_els[0].attrib["data-usd"])
+            list_price_elements = price_els[0].xpath(self.XPATH_DICT["list_price"])
+            if list_price_elements:
+                item["list_price"] = float(list_price_elements[0])
+        prof_els = element.xpath(self.XPATH_DICT["profile"])
+        item["profile"] = prof_els[0].text
+        item["profile_url"] = prof_els[0].attrib["href"]
+        item["available"] = True
+        sorted_json = json.dumps(item, sort_keys=True).encode("utf-8")
+        item["hexdigest"] = hashlib.md5(sorted_json).hexdigest()
+        return item
+
+    def main(self):
+        self.logger.info("Starting SCRAPER")
+        self.logger.info(f"Fetching {self.TARGET_URL}")
+        tree = self.get_tree(self.TARGET_URL)
+        result = {}
+        elements = tree.xpath(self.XPATH_DICT["card"])
+        total = len(elements)
+        self.logger.info(f"Total courses to parsing: {total}")
+        for index, element in enumerate(elements):
+            self.logger.debug(f"Parsing {index}/{total}")
+            course_id = element.xpath(self.XPATH_DICT["course_id"])[0]
+            if course_id in result:
+                continue
+            try:
+                item = self.processing_course(element)
+            except Exception as e:
+                self.logger.critical(f"COULD NOT COMPLETE - processing_course(): {e}")
+                return
+            item["course_id"] = course_id
+            result[course_id] = item
+
+        try:
+            self.logger.info("Updating the DB")
+            self.db_manager = DBManager(base_logger=self.base_logger)
+            if not self.db_manager.insert_or_update_db(result):
+                self.logger.error("COULD NOT COMPLETE: BD update")
+                return
+            self.logger.info("The BD is updated")
+        except Exception as e:
+            self.logger.critical(f"COULD NOT COMPLETE - insert/update DB: {e}")
+            return
+        self.logger.info("Ending SCRAPER")
