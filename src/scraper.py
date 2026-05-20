@@ -1,5 +1,6 @@
 import hashlib
 import json
+
 from lxml.html import HtmlElement
 
 from src import constants
@@ -43,7 +44,7 @@ class Scraper(ParserMixin):
         self.db_manager = None
         self.configure_parser()
 
-    def _get_item(self, element: HtmlElement) -> dict:
+    def processing_course(self, element: HtmlElement) -> dict:
         attrib = element.xpath(self.XPATH_DICT["attrib"])[0].attrib
         key_list = ['href', 'title', 'data-title']
         item = {k: v for k, v in attrib.items() if k in key_list}
@@ -65,21 +66,34 @@ class Scraper(ParserMixin):
         return item
 
     def main(self):
+        self.logger.info("Starting SCRAPER")
+        self.logger.info(f"Fetching {self.TARGET_URL}")
         tree = self.get_tree(self.TARGET_URL)
         result = {}
         elements = tree.xpath(self.XPATH_DICT["card"])
         total = len(elements)
+        self.logger.info(f"Total courses to parsing: {total}")
         for index, element in enumerate(elements):
-            print(f"{index}/{total}")
+            self.logger.debug(f"Parsing {index}/{total}")
             course_id = element.xpath(self.XPATH_DICT["course_id"])[0]
             if course_id in result:
                 continue
             try:
-                item = self._get_item(element)
+                item = self.processing_course(element)
             except Exception as e:
-                self.logger.critical(f"COULD NOT COMPLETE - _get_item(): {e}")
+                self.logger.critical(f"COULD NOT COMPLETE - processing_course(): {e}")
                 return
             item["course_id"] = course_id
             result[course_id] = item
-        self.db_manager = DBManager(base_logger=self.base_logger)
-        self.db_manager.insert_or_update_db(result)
+
+        try:
+            self.logger.info("Updating the DB")
+            self.db_manager = DBManager(base_logger=self.base_logger)
+            if not self.db_manager.insert_or_update_db(result):
+                self.logger.error("COULD NOT COMPLETE: BD update")
+                return
+            self.logger.info("The BD is updated")
+        except Exception as e:
+            self.logger.critical(f"COULD NOT COMPLETE - insert/update DB: {e}")
+            return
+        self.logger.info("Ending SCRAPER")
