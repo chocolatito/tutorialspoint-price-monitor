@@ -65,7 +65,7 @@ class Scraper(ParserMixin):
         item["hexdigest"] = hashlib.md5(sorted_json).hexdigest()
         return item
 
-    def main(self):
+    def main(self) -> None:
         self.logger.info("Starting SCRAPER")
         self.logger.info(f"Fetching {self.TARGET_URL}")
         tree = self.get_tree(self.TARGET_URL)

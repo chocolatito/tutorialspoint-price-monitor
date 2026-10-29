@@ -3,6 +3,7 @@ import time
 from curl_cffi import requests
 from curl_cffi.requests.impersonate import REAL_TARGET_MAP
 from lxml import html
+from lxml.html import HtmlElement
 
 
 class ParserMixin:
@@ -45,6 +46,6 @@ class ParserMixin:
     def html_parser(self, html_code: str):
         return html.fromstring(html_code)
 
-    def get_tree(self, url, impersonate: str = None, kwargs: str = {}):
+    def get_tree(self, url, impersonate: str = None, kwargs: str = {}) -> HtmlElement:
         response = self.http_client(url, impersonate=impersonate, kwargs=kwargs)
         return self.html_parser(response.text)

@@ -1,11 +1,11 @@
 import logging
+from logging import LoggerAdapter
 from logging import Logger
 import os
 import json
 import urllib.parse
 
 from src import constants
-# import constants
 
 
 def init__logger(file_name: str,
@@ -34,11 +34,11 @@ def init__logger(file_name: str,
     return logger
 
 
-def adapter_log(base_logger, worket_id: dict):
+def adapter_log(base_logger, worket_id: dict) -> LoggerAdapter:
     return logging.LoggerAdapter(base_logger, worket_id)
 
 
-def join_names(names: str | list):
+def join_names(names: str | list) -> str:
     if isinstance(names, str):
         return os.path.join(constants.BASE_DIR, names)
     if isinstance(names, list):
@@ -56,7 +56,7 @@ def save_json(file_path: str, data: dict | list) -> str:
     return file_path
 
 
-def get_parameter_from_url(url, parameter_name):
+def get_parameter_from_url(url, parameter_name) -> str | None:
     for key_value in urllib.parse.urlparse(url).query.split("&"):
         parts = key_value.split("=")
         if parameter_name != parts[0]:

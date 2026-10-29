@@ -13,7 +13,7 @@ class DBManager:
                            " WHERE course_id = :course_id").substitute
 
     @staticmethod
-    def create_database():
+    def create_database() -> None:
         conn = sqlite3.connect(constants.DB_NAME)
         for script_str in constants.SCRIPT_LIST:
             cursor = conn.cursor()
@@ -27,7 +27,7 @@ class DBManager:
             base_logger=base_logger,
             worket_id={"worker_id": "DB_MANAGER"})
 
-    def get_connetion(self):
+    def get_connetion(self) -> tuple[sqlite3.Connection, sqlite3.Cursor]:
         try:
             conn = sqlite3.connect(constants.DB_NAME)
             cursor = conn.cursor()
@@ -57,7 +57,7 @@ class DBManager:
                 cursor.close()
                 conn.close()
 
-    def insert_or_update_db(self, result: dict):
+    def insert_or_update_db(self, result: dict) -> bool:
         key_list = ["sale_price", "list_price", "course_id"]
         conn, cursor = None, None
         conn, cursor = self.get_connetion()
